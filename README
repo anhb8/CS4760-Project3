@@ -1,0 +1,25 @@
+##Author
+Name: Alina Nguyen
+Course: CS4760 - Project 2
+Date: 10/02/2022
+Language: C
+
+##Project Description
+The master program (master.c) is used to generate n slave process (based on user input from command line - Maximum of processes is 20) and write message into a file (cstest).
+
+The slave program (slave.c) is used to write the message into the file inside critical section. Eachslave process has its own log file to indicate the enter and exit time to the critical section
+
+
+##How to Run the Project
+1.Type: make
+2. Enter any of these following commands:
+a. ./master -h : Display help menu
+b. ./master n : Specify number of processes (Default maximum time:100)
+c. ./master -t ss n: Specify maximum time 
+
+ss: Maximum time in seconds after which the process should terminate itself if not completed (Default: 100)
+n: The maximum processes that the program runs at a time (From 1-20)
+
+Remove all the object files that had been created after running program: Enter: make clean
+
+
