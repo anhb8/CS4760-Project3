@@ -9,18 +9,75 @@
 #include "config.h"
 #include <string.h>
 #include <sys/shm.h>
+#include <sys/sem.h>
+#include <sys/ipc.h> 
+#include <sys/ipc.h>
+
+union semun {
+     int val;
+     struct semid_ds *buf;
+     unsigned short  *array;
+} arg;
 
 char *ofile= "cstest";
 FILE *file, *lfile;
 int shmid;
 struct sharedM *shmp;
-
+struct semaphore S;
 char logfile[10]="logfile.";
 char logNum[3]; //Process number
 
 struct timeval  now;
 struct tm* local;
-	
+
+int semflg;			/* semflg to pass to semget() */
+int nsems;			/* nsems to pass to semget() */
+int semid;			// id of semephore set
+int i;
+struct sembuf *sops;	/* ptr to operations to perform */
+int s=1;
+void removeSem() {
+        if (semctl(semid, 0, IPC_RMID, arg) == -1) {
+                perror("semctl");
+                exit(1);
+        }
+}
+
+//Create semaphore
+void createSem() {
+	if ((semid = semget(key,1, 0660|IPC_CREAT)) == -1) {
+ 		perror("semget: semget failed");
+ 		exit(EXIT_FAILURE);
+	}
+
+	//Initialize semaphore
+	arg.val = 1; //Initialize value of semaphore to 1
+	i = semctl(semid, 0, SETVAL, arg);
+ 	if (i == -1) {
+ 		perror("semctl: semctl failed");
+		removeSem();
+ 		exit(1);
+	}
+
+	/*if ((i = semop(semid, sops, nsops)) == -1) {
+ 		perror("semop: semop failed");
+ 	}*/
+}	
+
+
+//Wait function
+void wait_Sem(int s) {
+	S.count=s;
+	while (S.count<=0); //Wait until the critical section is available
+	S.count--;
+}
+
+//Signal function
+void signal_Sem(int s) {
+	S.count=s;
+	S.count++;
+}
+
 //Deallocate shared memory
 void removeSharedMemory() {
         //Detach the process
@@ -77,49 +134,21 @@ void process (const int i,int num) {
        
         signal(SIGALRM, siginit_handler);	
 	
-	for ( int k = 0; k < 5; k++ ) { 
-                do {
-                        shmp->flag[i] = want_in;
-                        j=shmp->turn;
-                        while (j!=i) {
-                                if (shmp->flag[j]!=idle) {
-                                        j=shmp->turn;
-                                } else {
-                                        j=(j+1)%num;
-                                }   
-                        }   
-                        //Declare intention to enter critical section
-                        shmp->flag[i] = in_cs;
+	createSem();
+	//Entry Section
+	wait_Sem(s);
 
-                        //Check that no one else is in critical section
-                        for (j=0;j<num;j++){ 
-                                if ((j!=i) && (shmp->flag[j]== in_cs)) {
-                                        break;
-                                }   
-                        }   
+	//Critical section
+	sleep(ran);
+	enterMessage(i);
 
-                } while(j<num || (shmp->turn != i && shmp->flag[shmp->turn]!= idle));
-                    
-                //Enter critical section
-                shmp->turn=i;
-	        sleep(ran);	
-		enterMessage(i);
+	sleep(ran);
+        exitMessage(i);
 
-		sleep(ran);
-                exitMessage(i);
+	 //Exit section
+	 signal_Sem(s);
 
-                //Exit critical section
-                j= (shmp->turn+1) %num;
-                while (shmp->flag[j]==idle) {
-                        j= (j+1)%num;
 
-                }
-                
-		//Assign turn to next waiting process
-                shmp->turn =j;
-                shmp->flag[i]=idle;   
-                
-   	}
 }
 
 
@@ -148,6 +177,8 @@ int main(int argc, char *argv[]) {
 
 	
 	process(numP,nProcess);
+	
   	removeSharedMemory(); 
+	removeSem();
 	return 0;
 }

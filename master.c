@@ -11,6 +11,7 @@
 #include <time.h> //local time
 #include <sys/time.h>
 #include "config.h"
+
 pid_t all_cProcess[MAX_PROCESS];
 int shmid;
 struct sharedM *shmp;
