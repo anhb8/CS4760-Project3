@@ -12,13 +12,6 @@
 #include <sys/sem.h>
 #include <sys/ipc.h>
 
-
-union semun {
-     int val;
-     struct semid_ds *buf;
-     unsigned short  *array;
-} arg;
-
 char *ofile= "cstest";
 FILE *file, *lfile;
 int shmid;
@@ -151,9 +144,9 @@ void process (int i) {
 	int ran=rand() % 3 + 1; //Generate a random number from 1-3
         char numP[2]; //Process number
        
-	for(j = 0; j < 5; j++){	
+	for(j = 0; j < 1; j++){	
 		//Entry Section
-		wait_Sem(s);
+		wait_Sem();
 
 		//Critical section
 		sleep(ran);
@@ -163,7 +156,7 @@ void process (int i) {
         	exitMessage(i);
 
 		//Exit section
-		signal_Sem(s);
+		signal_Sem();
 	}
 }
 

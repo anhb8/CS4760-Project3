@@ -14,6 +14,7 @@
 #include "config.h"
 
 pid_t all_cProcess[MAX_PROCESS];
+
 int shmid;
 struct sharedM *shmp;
 FILE *file; //Log file
@@ -25,7 +26,15 @@ struct tm* local;
 int n_process=-1;
 int semID;
 
-
+//Find empty index
+int findIndex() {
+	int i;
+	for (i=0;i<n_process;i++) {
+		if (all_cProcess[i]==0)
+			return i;
+	}
+	return -1;
+}
 //Create semaphore
 void createSem() {
 	const unsigned short unlocked = 1;
@@ -82,48 +91,57 @@ void removeSharedMemory() {
                 exit(1);
         }
 }
+void logTermination(pid_t p){ 
+        file=fopen("logfile","a");
+        gettimeofday(&now, NULL);
+        local = localtime(&now.tv_sec);
+        fprintf(file,"%02d:%02d:%02d Process %d - Terminated\n",local->tm_hour, local->tm_min, local->tm_sec,p);
+        fclose(file);
+}
 
 //Interrupt signal (^C) 
 void siginit_handler () {
-	file=fopen("logfile","a");
-	printf("-Ctrl C triggered\n");
 	for (int i=0; i<n_process; i++) {
-                gettimeofday(&now, NULL);
-        	local = localtime(&now.tv_sec);
-		kill(all_cProcess[i],SIGTERM);
-                fprintf(file,"%02d:%02d:%02d Process %d - Terminated\n",local->tm_hour, local->tm_min, local->tm_sec,all_cProcess[i]);
-        
+		if(all_cProcess[i] != 0){ 
+                        kill(all_cProcess[i],SIGTERM); 
+                        logTermination(all_cProcess[i]);
+                }  
 	}
 	removeSharedMemory();
-	fclose(file);
 	exit(EXIT_FAILURE);
-
 }
 
 
 //Signal when the program runs more than time limit
 void alarm_handler () {
-	file=fopen("logfile","a");
 	fprintf(stderr,"Error: Exceed time limit\n");
 	
 	//Kill all processes if exceeds time limit
 	for (int i=0; i<n_process; i++) {
-        	gettimeofday(&now, NULL);
-        	local = localtime(&now.tv_sec);
-		kill(all_cProcess[i],SIGTERM); 
-		fprintf(file,"%02d:%02d:%02d Process %d - Terminated\n",local->tm_hour, local->tm_min, local->tm_sec,all_cProcess[i]);
+		if(all_cProcess[i] != 0){
+			kill(all_cProcess[i],SIGTERM); 
+			logTermination(all_cProcess[i]);
+		}
         } 
-	fclose(file);
         removeSharedMemory();
 	exit(EXIT_FAILURE);	
 }
-
+int IDtoIndex(pid_t p){
+	int i;
+	for(i = 0; i<n_process;i++){
+		if(all_cProcess[i] == p)
+			return i;
+	}
+	return -1;
+}
 void forkProcess(int n_process) {
 	int i;
+	int availSpot = n_process;
 	int totalProc = 0;
 	pid_t p;
 
-	for (i=0;i<n_process;i++) {
+	//for (i=0;i<n_process;i++) {
+	while(1){
 		pid_t pid = fork();
 		if (pid<0) {
 			perror("Error: Fork failed");
@@ -143,20 +161,42 @@ void forkProcess(int n_process) {
 			execl("slave",procID,ordNum,NULL);
 			
 			//if execl failed
-			perror("Error: ");
+			perror("Error: execl failed ");
 			exit(EXIT_FAILURE);
 		} else {			//Parent process
 			totalProc++;
-			all_cProcess[i]=pid;
+			availSpot--;;
+			int index=findIndex();
+			all_cProcess[index] = pid;
+			
+			if (availSpot == 0) {
+				p = wait(NULL);
+				logTermination(p);
+				int index = IDtoIndex(p);
+			       	if(index == -1){
+					fprintf(stderr,"Error: Can't find process ID in the list\n");
+					siginit_handler();
+				}	
+				all_cProcess[index] = 0;
+				availSpot++;
+			} else {
+				if((p = waitpid(-1, NULL, WNOHANG)) != 0){
+					logTermination(p);
+                                	int index = IDtoIndex(p);
+                           	     	if(index == -1){
+                                        	fprintf(stderr,"Error: Can't find process ID in the list\n");
+                                        	siginit_handler();
+                               	 	}
+                                	all_cProcess[index] = 0;
+                                	availSpot++;
+				}	
+			}
+
 		}
 	}
+
 	while((p = wait(NULL)) > 0) {
-		//Terminated succesfully
-		file=fopen("logfile","a");
-		gettimeofday(&now, NULL);
-		local = localtime(&now.tv_sec);
-		fprintf(file,"%02d:%02d:%02d Process %d - Terminated\n",local->tm_hour, local->tm_min, local->tm_sec,p);
-		fclose(file);
+		logTermination(p);
 	}	
 }
 
@@ -230,7 +270,7 @@ int main(int argc, char *argv[])
 		}
 		
 	}
-	//printf("%d",n_process);
+	
 	signal(SIGALRM, alarm_handler);
         alarm(sec);
 

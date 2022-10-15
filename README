@@ -1,0 +1,23 @@
+##Author
+Name: Alina Nguyen
+Course: CS4760 - Project 3
+Date: 10/14/2022
+Language: C
+
+##Project Description
+The master program (master.c) is used to generate n slave process (based on user input from command line - Maximum number of processes that can be fork concurrently is 20). The program will fork more only after some previously forked process terminates but the number of processes can be fork concurrently can't exceed 20. The program outputs the time of termination to the log file. 
+
+The slave program (slave.c) is used to write the message into the file inside critical section. It uses semaphores for synchronization of processes and only allows one process to critical section at a time. Each slave process has its own log file to indicate the enter and exit time to the critical section. The critical resource is the file cstest which is updated by a child (slave process) under exclusive control access.
+
+##How to Run the Project
+1.Type: make
+2. Enter any of these following commands:
+a. ./master -h : Display help menu
+b. ./master n : Specify number of processes (Default maximum time:100)
+c. ./master -t ss n: Specify maximum time 
+
+ss: Maximum time in seconds after which the process should terminate itself if not completed (Default: 100)
+n: The maximum processes that the program runs at a time (From 1-20)
+
+Remove all the object files that had been created after running program: Enter: make clean
+
