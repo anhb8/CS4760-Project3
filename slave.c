@@ -48,49 +48,6 @@ void signal_Sem(){
 	}
 
 }
-/*void removeSem() {
-        if (semctl(semid, 0, IPC_RMID, arg) == -1) {
-                perror("semctl");
-                exit(1);
-        }
-}
-
-//Create semaphore
-void createSem() {
-	if ((semid = semget(key,1, 0660|IPC_CREAT)) == -1) {
- 		perror("semget: semget failed");
- 		exit(EXIT_FAILURE);
-	}
-
-	//Initialize semaphore
-	arg.val = 1; //Initialize value of semaphore to 1
-	i = semctl(semid, 0, SETVAL, arg);
- 	if (i == -1) {
- 		perror("semctl: semctl failed");
-		removeSem();
- 		exit(1);
-	}
-
-	if ((i = semop(semid, sops, nsops)) == -1) {
- 		perror("semop: semop failed");
- 	}
-}	
-
-
-//Wait function
-void wait_Sem(int s) {
-	S.count=s;
-	while (S.count<=0); //Wait until the critical section is available
-	S.count--;
-}
-
-//Signal function
-void signal_Sem(int s) {
-	S.count=s;
-	S.count++;
-}*/
-
-//Deallocate shared memory
 void removeSharedMemory() {
         //Detach the process
          if (shmdt(shmp) == -1) {
@@ -144,7 +101,7 @@ void process (int i) {
 	int ran=rand() % 3 + 1; //Generate a random number from 1-3
         char numP[2]; //Process number
        
-	for(j = 0; j < 1; j++){	
+	for(j = 0; j < 5; j++){	
 		//Entry Section
 		wait_Sem();
 
