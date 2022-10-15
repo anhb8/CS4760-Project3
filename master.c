@@ -10,6 +10,7 @@
 #include <sys/shm.h> //shared memory
 #include <time.h> //local time
 #include <sys/time.h>
+#include <sys/sem.h>
 #include "config.h"
 
 pid_t all_cProcess[MAX_PROCESS];
@@ -22,6 +23,23 @@ char logNum[3]; //Process number
 struct timeval  now;
 struct tm* local;
 int n_process=-1;
+int semID;
+
+
+//Create semaphore
+void createSem() {
+	const unsigned short unlocked = 1;
+	semID = semget(key, 1, IPC_CREAT | IPC_EXCL | S_IRUSR | S_IWUSR);
+	if(semID < 0) {
+    		perror("Error: semget failed");
+		exit(EXIT_FAILURE);
+	}
+
+	if (semctl(semID, 0, SETVAL, unlocked) == -1){
+    		perror("Error: semctl failed");
+    		exit(EXIT_FAILURE);
+  	}
+}
 
 //Allocate shared memory
 int createSharedMemory() {
@@ -56,7 +74,13 @@ void removeSharedMemory() {
 	if (shmctl(shmid, IPC_RMID, 0) == -1) {
       		perror("Error: shmctl");
      	 	exit(EXIT_FAILURE);
-   }
+  	}
+
+	//Remove semaphore
+	if (semctl(semID, 0, IPC_RMID) == -1) {
+                perror("semctl");
+                exit(1);
+        }
 }
 
 //Interrupt signal (^C) 
@@ -67,7 +91,7 @@ void siginit_handler () {
                 gettimeofday(&now, NULL);
         	local = localtime(&now.tv_sec);
 		kill(all_cProcess[i],SIGTERM);
-                fprintf(file,"%02d:%02d:%02d Process %d - Terminated\n",local->tm_hour, local->tm_min, local->tm_sec,i);
+                fprintf(file,"%02d:%02d:%02d Process %d - Terminated\n",local->tm_hour, local->tm_min, local->tm_sec,all_cProcess[i]);
         
 	}
 	removeSharedMemory();
@@ -87,43 +111,52 @@ void alarm_handler () {
         	gettimeofday(&now, NULL);
         	local = localtime(&now.tv_sec);
 		kill(all_cProcess[i],SIGTERM); 
-		fprintf(file,"%02d:%02d:%02d Process %d - Terminated\n",local->tm_hour, local->tm_min, local->tm_sec,i);
+		fprintf(file,"%02d:%02d:%02d Process %d - Terminated\n",local->tm_hour, local->tm_min, local->tm_sec,all_cProcess[i]);
         } 
 	fclose(file);
         removeSharedMemory();
 	exit(EXIT_FAILURE);	
 }
 
-void forkProcess(int n_process,int sec) {
-	char num[2];
-	char nProcess[2];
+void forkProcess(int n_process) {
 	int i;
-	sprintf(nProcess,"%d",n_process);	
+	int totalProc = 0;
+	pid_t p;
+
 	for (i=0;i<n_process;i++) {
-		sprintf(num,"%d",i);
 		pid_t pid = fork();
 		if (pid<0) {
 			perror("Error: Fork failed");
 			removeSharedMemory();
 			exit(EXIT_FAILURE);
 			
-		} else if (pid == 0) {  	//Child process
-			execl("slave",num,nProcess,NULL);
-		} else {			//Parent process
-			all_cProcess[i]=pid;
+		} else if (pid == 0) {  
+			//Child process
+			totalProc++;
+			char procID[20] = {"\0"};
+			char ordNum[10] = {"\0"};
+			pid_t p = getpid();
 
+			sprintf(procID,"%d",p);
+			sprintf(ordNum,"%d",totalProc);
+			
+			execl("slave",procID,ordNum,NULL);
+			
+			//if execl failed
+			perror("Error: ");
+			exit(EXIT_FAILURE);
+		} else {			//Parent process
+			totalProc++;
+			all_cProcess[i]=pid;
 		}
 	}
-	while(wait(NULL) > 0) {
-
+	while((p = wait(NULL)) > 0) {
 		//Terminated succesfully
-		if (wait(NULL) <0) { 
-			file=fopen("logfile","a");
-			gettimeofday(&now, NULL);
-			local = localtime(&now.tv_sec);
-			fprintf(file,"%02d:%02d:%02d Process %d - Terminated\n",local->tm_hour, local->tm_min, local->tm_sec,i);
-			fclose(file);
-		}
+		file=fopen("logfile","a");
+		gettimeofday(&now, NULL);
+		local = localtime(&now.tv_sec);
+		fprintf(file,"%02d:%02d:%02d Process %d - Terminated\n",local->tm_hour, local->tm_min, local->tm_sec,p);
+		fclose(file);
 	}	
 }
 
@@ -212,11 +245,11 @@ int main(int argc, char *argv[])
         } 
 	//MAIN CODE
 	createSharedMemory();
-        attachSharedMemory();
- 
+        attachSharedMemory(); 
+	createSem();	
 	
-	forkProcess(n_process,sec);
-       	removeSharedMemory();
-        
+	forkProcess(n_process);
+       	
+	removeSharedMemory();
 	return 0;
 }

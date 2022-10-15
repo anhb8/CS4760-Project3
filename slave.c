@@ -10,8 +10,8 @@
 #include <string.h>
 #include <sys/shm.h>
 #include <sys/sem.h>
-#include <sys/ipc.h> 
 #include <sys/ipc.h>
+
 
 union semun {
      int val;
@@ -30,13 +30,32 @@ char logNum[3]; //Process number
 struct timeval  now;
 struct tm* local;
 
+int semID;
 int semflg;			/* semflg to pass to semget() */
 int nsems;			/* nsems to pass to semget() */
 int semid;			// id of semephore set
 int i;
-struct sembuf *sops;	/* ptr to operations to perform */
 int s=1;
-void removeSem() {
+
+void wait_Sem(){
+	struct sembuf sop = {.sem_num = 0, .sem_flg = 0, .sem_op = -1};
+
+	if (semop(semID, &sop, 1) == -1){
+		perror("user_proc: semop");
+		exit(EXIT_FAILURE);
+	}
+}
+
+void signal_Sem(){
+	struct sembuf sop = {.sem_num = 0, .sem_flg = 0, .sem_op = 1};
+
+	if (semop(semID, &sop, 1) == -1){
+		perror("user_proc: semop");
+		exit(EXIT_FAILURE);
+	}
+
+}
+/*void removeSem() {
         if (semctl(semid, 0, IPC_RMID, arg) == -1) {
                 perror("semctl");
                 exit(1);
@@ -59,9 +78,9 @@ void createSem() {
  		exit(1);
 	}
 
-	/*if ((i = semop(semid, sops, nsops)) == -1) {
+	if ((i = semop(semid, sops, nsops)) == -1) {
  		perror("semop: semop failed");
- 	}*/
+ 	}
 }	
 
 
@@ -76,7 +95,7 @@ void wait_Sem(int s) {
 void signal_Sem(int s) {
 	S.count=s;
 	S.count++;
-}
+}*/
 
 //Deallocate shared memory
 void removeSharedMemory() {
@@ -126,29 +145,26 @@ void exitMessage(int n){
 	fclose(file);
 }
 
-void process (const int i,int num) {
+void process (int i) {
         int j;
 	srand(time(0)+i);
 	int ran=rand() % 3 + 1; //Generate a random number from 1-3
         char numP[2]; //Process number
        
-        signal(SIGALRM, siginit_handler);	
-	
-	createSem();
-	//Entry Section
-	wait_Sem(s);
+	for(j = 0; j < 5; j++){	
+		//Entry Section
+		wait_Sem(s);
 
-	//Critical section
-	sleep(ran);
-	enterMessage(i);
+		//Critical section
+		sleep(ran);
+		enterMessage(i);
 
-	sleep(ran);
-        exitMessage(i);
+		sleep(ran);
+        	exitMessage(i);
 
-	 //Exit section
-	 signal_Sem(s);
-
-
+		//Exit section
+		signal_Sem(s);
+	}
 }
 
 
@@ -156,11 +172,11 @@ int main(int argc, char *argv[]) {
 	//Interrupt signal handler
 	signal(SIGINT, siginit_handler);
 
-	int numP=atoi(argv[0]); //Process number
-	int nProcess=atoi(argv[1]); //Number of process can run 
-
-	sprintf(logNum,"%d",numP);
-        strncat(logfile,logNum,2);	
+	int procID=atoi(argv[0]); //Process ID
+	int ordNum = atoi(argv[1]); //Process order number
+	
+	sprintf(logNum,"%d",ordNum);
+        strcat(logfile,logNum);	
 	//Shared memory ID 
 	shmid=shmget(SHM_KEY, sizeof(struct sharedM), 0644);
 	if (shmid == -1) {
@@ -174,11 +190,16 @@ int main(int argc, char *argv[]) {
                 perror("Error:shmat");
                 exit(EXIT_FAILURE);
         }
-
 	
-	process(numP,nProcess);
+	//Attach slave process to semaphore ID
+	semID=semget(key,0,0);
+	if(semID < 0){
+		perror("Error: failed to get id for semaphore");
+		exit(EXIT_FAILURE);
+	}
+	process(procID);
 	
   	removeSharedMemory(); 
-	removeSem();
+	//removeSem();
 	return 0;
 }
